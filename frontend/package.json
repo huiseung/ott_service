@@ -1,0 +1,16 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:admin": "pnpm --filter admin-web dev --port 3001",
+    "build:admin": "pnpm --filter admin-web build",
+    "dev:user": "pnpm --filter user-web dev --port 3000",
+    "build:user": "pnpm --filter user-web build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.30.3"
+}

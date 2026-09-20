@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: ott-admin-api
+  datasource:
+    url: jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:ott}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+app:
+  security:
+    admin-username: ${ADMIN_USERNAME:admin}
+    admin-password: ${ADMIN_PASSWORD}
+    admin-web-origin: http://localhost:3001
+  storage:
+    bucket: ott-originals
+    region: us-east-1
+    endpoint: http://localhost:9000
+    public-endpoint: http://localhost:9000
+    access-key: ${STORAGE_ACCESS_KEY}
+    secret-key: ${STORAGE_SECRET_KEY}
+    path-style-access: true
+    presigned-url-ttl: 15m
+    minimum-part-size: 16MB
+    maximum-part-size: 64MB
+    maximum-file-size: 500GB
+    maximum-requested-presigned-urls: 100
+    incomplete-upload-expiration: 7d
+    reconciliation-interval: 5m

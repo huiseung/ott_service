@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: ott-media-worker
+  main:
+    web-application-type: none
+  datasource:
+    url: jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:ott}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+app:
+  storage:
+    bucket: ott-originals
+    region: us-east-1
+    endpoint: http://localhost:9000
+    access-key: ${STORAGE_ACCESS_KEY}
+    secret-key: ${STORAGE_SECRET_KEY}
+    path-style-access: true
+    presigned-url-ttl: 15m
+    minimum-part-size: 16MB
+    maximum-part-size: 64MB
+    maximum-file-size: 500GB
+    maximum-requested-presigned-urls: 100
+    incomplete-upload-expiration: 7d
+    reconciliation-interval: 5m
+
+media:
+  worker:
+    enabled: true
+    worker-id: ${WORKER_ID:}
+    poll-interval: 5s
+    max-concurrent-jobs: 1
+    heartbeat-interval: 10s
+    lease-duration: 60s
+    progress-update-interval: 3s
+    max-attempts: 3
+    scratch-directory: ./work/jobs
+    minimum-free-disk: 2GB
+    ffmpeg-timeout: 2h
+    package-upload-concurrency: 4
+    retain-failed-scratch: false
+  profile:
+    version: hls-720p-v1
+    rendition-name: 720p
+    max-width: 1280
+    max-height: 720
+    segment-duration: 4
+    video-codec: libx264
+    audio-codec: aac
+    video-crf: 21
+    video-preset: veryfast
+    audio-bitrate: 128k
+    max-source-width: 1920
+    max-source-height: 1080
+    max-source-fps: 60
+    max-duration: 65m
+    ffmpeg-binary: ffmpeg
+    ffprobe-binary: ffprobe
