@@ -29,12 +29,6 @@ public interface WatchProgressRepository extends JpaRepository<WatchProgress, Wa
                     values(media_package_id),
                     media_package_id
                 ),
-                playback_session_id = if(
-                    (playback_session_id = values(playback_session_id) and values(client_event_seq) >= client_event_seq)
-                    or (playback_session_id <> values(playback_session_id) and values(occurred_at) >= occurred_at),
-                    values(playback_session_id),
-                    playback_session_id
-                ),
                 position_ms = if(
                     (playback_session_id = values(playback_session_id) and values(client_event_seq) >= client_event_seq)
                     or (playback_session_id <> values(playback_session_id) and values(occurred_at) >= occurred_at),
@@ -64,6 +58,12 @@ public interface WatchProgressRepository extends JpaRepository<WatchProgress, Wa
                     or (playback_session_id <> values(playback_session_id) and values(occurred_at) >= occurred_at),
                     values(updated_at),
                     updated_at
+                ),
+                playback_session_id = if(
+                    (playback_session_id = values(playback_session_id) and values(client_event_seq) >= client_event_seq)
+                    or (playback_session_id <> values(playback_session_id) and values(occurred_at) >= occurred_at),
+                    values(playback_session_id),
+                    playback_session_id
                 )
             """, nativeQuery = true)
     void upsertProgress(Long userId, Long videoId, Long mediaPackageId, Long playbackSessionId, long positionMs,

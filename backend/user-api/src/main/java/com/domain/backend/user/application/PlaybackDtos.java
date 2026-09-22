@@ -1,5 +1,6 @@
 package com.domain.backend.user.application;
 
+import com.domain.backend.playback.domain.WatchEventType;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
@@ -12,21 +13,22 @@ public final class PlaybackDtos {
     public record PlaybackStartResponse(
             Long videoId,
             Long mediaPackageId,
-            String playbackSessionToken,
-            String manifestUrl,
-            long durationMs,
-            long resumePositionMs
+            String playbackSessionId,
+            String hlsUrl,
+            long durationSeconds,
+            long resumePositionSeconds,
+            Instant expiresAt
     ) {
     }
 
-    public record ProgressRequest(
-            @Min(0) long positionMs,
-            @Min(1) long durationMs,
-            @Min(0) long clientEventSeq,
-            @NotNull Instant occurredAt
+    public record WatchEventRequest(
+            @NotNull WatchEventType eventType,
+            @Min(0) long positionSeconds,
+            @Min(0) long sequence,
+            Instant occurredAt
     ) {
     }
 
-    public record ProgressResponse(long positionMs, long clientEventSeq, Instant occurredAt) {
+    public record WatchEventResponse(String eventId, String status) {
     }
 }
