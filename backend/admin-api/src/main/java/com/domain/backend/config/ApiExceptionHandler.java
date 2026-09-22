@@ -2,6 +2,7 @@ package com.domain.backend.config;
 
 import com.domain.backend.video.application.UploadException;
 import java.time.Instant;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -21,6 +22,12 @@ public class ApiExceptionHandler {
     ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException e) {
         return ResponseEntity.badRequest()
                 .body(new ApiError(Instant.now(), HttpStatus.BAD_REQUEST.value(), "Invalid request"));
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ResponseEntity<ApiError> handleOptimisticLock(OptimisticLockingFailureException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(Instant.now(), HttpStatus.CONFLICT.value(), "Resource was modified by another request"));
     }
 
     record ApiError(Instant timestamp, int status, String message) {

@@ -35,3 +35,6 @@ app:
     maximum-requested-presigned-urls: 100
     incomplete-upload-expiration: 7d
     reconciliation-interval: 5m
+  images:
+    max-file-size: 10MB
+    aspect-ratio-tolerance: 0.03
