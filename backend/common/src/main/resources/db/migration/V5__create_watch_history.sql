@@ -1,0 +1,20 @@
+create table watch_history (
+    user_id bigint not null,
+    video_id bigint not null,
+    media_package_id bigint not null,
+    playback_session_id varchar(80) not null,
+    position_seconds bigint not null,
+    duration_seconds bigint not null,
+    sequence bigint not null,
+    completed boolean not null,
+    last_event_type varchar(50) not null,
+    last_watched_at datetime(6) not null,
+    created_at datetime(6) not null,
+    updated_at datetime(6) not null,
+    primary key (user_id, video_id),
+    index ix_watch_history_video_id (video_id),
+    index ix_watch_history_last_watched_at (last_watched_at),
+    constraint fk_watch_history_user foreign key (user_id) references users(id),
+    constraint fk_watch_history_video foreign key (video_id) references videos(id),
+    constraint fk_watch_history_media_package foreign key (media_package_id) references media_packages(id)
+) engine = InnoDB;
