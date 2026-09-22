@@ -10,18 +10,34 @@ cd ~/ott_service
 copy .env.example .env
 ```
 
-- 운영에서 사용하는 계정 정보 기입, 절대 github에 push 하지 않는다
+- 운영에서 사용하는 계정 정보 env 파일에 기입, 절대 github에 push 하지 않는다
 ```
 MYSQL_USER=ott
 MYSQL_PASSWORD=change-me
 MYSQL_ROOT_PASSWORD=change-me-root
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=change-me-minio
+MINIO_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+STORAGE_PUBLIC_ENDPOINT=http://localhost:9000
 
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-me-admin
-LOCAL_TEST_USER_ENABLED=false  
-LOCAL_TEST_USER_PASSWORD=   
+DB_USERNAME=ott
+DB_PASSWORD=change-me
+STORAGE_ACCESS_KEY=minioadmin
+STORAGE_SECRET_KEY=change-me-minio
+
+LOCAL_TEST_USER_ENABLED=false
+LOCAL_TEST_USER_PASSWORD=
+USER_ACCESS_TOKEN_SECRET=replace-with-at-least-32-random-characters
+REDIS_HOST=localhost
+REDIS_PORT=6379
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+WATCH_EVENTS_TOPIC=watch-events
+WATCH_EVENTS_DLQ_TOPIC=watch-events.dlq
+WATCH_EVENTS_PARTITIONS=12
+PLAYBACK_CONSUMER_GROUP=playback-progress-group
+
 ```
 
 테스트 사용자 계정이 필요하면 env에 아래처럼 설정한다.
@@ -79,7 +95,10 @@ user-web은 user-api의 사용자 계정을 사용한다.
 - MySQL
 - MinIO
 - MinIO bucket init
+- Redis
+- Kafka
 - media-worker
+- playback-worker
 
 Spring API와 Next.js는 로컬에서 실행한다.
 
