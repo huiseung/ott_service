@@ -14,8 +14,8 @@ public final class UserWatchHistoryDtos {
     public record WatchHistoryItem(
             Long videoId,
             String title,
-            long positionMs,
-            long durationMs,
+            long positionSeconds,
+            long durationSeconds,
             double progressRate,
             Instant watchedAt
     ) {
