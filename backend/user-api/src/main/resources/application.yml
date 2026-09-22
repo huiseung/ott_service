@@ -11,9 +11,42 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 1s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 0
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 10
+      properties:
+        enable.idempotence: true
+        delivery.timeout.ms: 3000
+        request.timeout.ms: 1000
+        linger.ms: 5
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 server:
   port: 8081
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 app:
   security:
@@ -21,12 +54,20 @@ app:
   user-security:
     cookie-name: OTT_USER_SESSION
     session-ttl: 7d
+    access-token-ttl: 15m
+    access-token-secret: ${USER_ACCESS_TOKEN_SECRET}
     playback-session-ttl: 6h
     cookie-secure: false
     same-site: Lax
     login-max-attempts-per-minute: 10
     local-test-user-enabled: ${LOCAL_TEST_USER_ENABLED:false}
     local-test-user-password: ${LOCAL_TEST_USER_PASSWORD:}
+  playback:
+    watch-events-topic: ${WATCH_EVENTS_TOPIC:watch-events}
+    watch-events-dlq-topic: ${WATCH_EVENTS_DLQ_TOPIC:watch-events.dlq}
+    watch-events-partitions: ${WATCH_EVENTS_PARTITIONS:12}
+    publish-timeout: 2s
+    resume-cache-ttl: 24h
   storage:
     bucket: ott-originals
     region: us-east-1
