@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: ott-playback-worker
+  main:
+    web-application-type: none
+  datasource:
+    url: jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:ott}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: 2000
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 1s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 0
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${PLAYBACK_CONSUMER_GROUP:playback-progress-group}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:500}
+      properties:
+        max.poll.interval.ms: 300000
+        spring.json.trusted.packages: com.domain.backend.playback.event,com.domain.backend.playback.domain,java.util,java.time
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+playback:
+  worker:
+    watch-events-topic: ${WATCH_EVENTS_TOPIC:watch-events}
+    watch-events-dlq-topic: ${WATCH_EVENTS_DLQ_TOPIC:watch-events.dlq}
+    consumer-group-id: ${PLAYBACK_CONSUMER_GROUP:playback-progress-group}
+    progress-ttl: 30d
+    progress-checkpoint-interval: 60s
+    flush-interval: 10s
+    flush-claim-ttl: 30s
+    flush-batch-size: 500
