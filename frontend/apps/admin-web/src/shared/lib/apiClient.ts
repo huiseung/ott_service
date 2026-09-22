@@ -7,9 +7,10 @@ export function hasAdminCredentials() { return basicAuthorization !== null; }
 export function getAdminAuthorization() { return basicAuthorization; }
 export function clearAdminCredentials() { basicAuthorization = null; }
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
   const response = await fetch(`${config.adminApiBaseUrl}${path}`, {
     ...init,
-    headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...(basicAuthorization ? { Authorization: basicAuthorization } : {}), ...init.headers },
+    headers: { ...(init.body && !isFormData ? { "Content-Type": "application/json" } : {}), ...(basicAuthorization ? { Authorization: basicAuthorization } : {}), ...init.headers },
     cache: "no-store",
   });
   if (!response.ok) throw new ApiError(response.status, await response.text() || `HTTP ${response.status}`);
