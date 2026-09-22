@@ -1,7 +1,7 @@
 package com.domain.backend.user.application;
 
 import com.domain.backend.user.application.UserAuthDtos.LoginRequest;
-import com.domain.backend.user.application.UserAuthDtos.LoginResponse;
+import com.domain.backend.user.application.UserAuthDtos.AuthResponse;
 import com.domain.backend.user.domain.UserSession;
 import com.domain.backend.user.infrastructure.persistence.AppUserRepository;
 import com.domain.backend.user.infrastructure.persistence.UserSessionRepository;
@@ -25,17 +25,20 @@ public class UserAuthService {
     private final UserSessionRepository sessionRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenHasher tokenHasher;
+    private final AccessTokenService accessTokenService;
     private final UserSecurityProperties properties;
     private final LoginRateLimiter rateLimiter;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public UserAuthService(AppUserRepository userRepository, UserSessionRepository sessionRepository,
                            PasswordEncoder passwordEncoder, TokenHasher tokenHasher,
-                           UserSecurityProperties properties, LoginRateLimiter rateLimiter) {
+                           AccessTokenService accessTokenService, UserSecurityProperties properties,
+                           LoginRateLimiter rateLimiter) {
         this.userRepository = userRepository;
         this.sessionRepository = sessionRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenHasher = tokenHasher;
+        this.accessTokenService = accessTokenService;
         this.properties = properties;
         this.rateLimiter = rateLimiter;
     }
@@ -57,10 +60,29 @@ public class UserAuthService {
                 user.getId(),
                 Instant.now().plus(properties.getSessionTtl())
         ));
+        UserPrincipal principal = new UserPrincipal(user.getId(), user.getLoginId(), user.getDisplayName());
         return new LoginResult(
-                new LoginResponse(user.getId(), user.getLoginId(), user.getDisplayName()),
+                authResponse(principal),
                 sessionCookie(token, properties.getSessionTtl().toSeconds()).toString()
         );
+    }
+
+    @Transactional
+    public AuthResponse refresh(HttpServletRequest request) {
+        String token = findCookie(request);
+        if (token == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh session is missing");
+        }
+        var session = sessionRepository.findBySessionTokenHashAndInvalidatedAtIsNullAndExpiresAtAfter(
+                        tokenHasher.sha256(token),
+                        Instant.now()
+                )
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh session is invalid"));
+        var user = userRepository.findById(session.getUserId())
+                .filter(candidate -> candidate.isEnabled())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is unavailable"));
+        sessionRepository.touch(session.getId(), Instant.now());
+        return authResponse(new UserPrincipal(user.getId(), user.getLoginId(), user.getDisplayName()));
     }
 
     public String logoutCookieHeader() {
@@ -103,7 +125,17 @@ public class UserAuthService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    public record LoginResult(LoginResponse response, String setCookieHeader) {
+    private AuthResponse authResponse(UserPrincipal principal) {
+        return new AuthResponse(
+                principal.userId(),
+                principal.loginId(),
+                principal.displayName(),
+                accessTokenService.issue(principal),
+                accessTokenService.expiresInSeconds()
+        );
+    }
+
+    public record LoginResult(AuthResponse response, String setCookieHeader) {
 
         public HttpHeaders headers() {
             HttpHeaders headers = new HttpHeaders();

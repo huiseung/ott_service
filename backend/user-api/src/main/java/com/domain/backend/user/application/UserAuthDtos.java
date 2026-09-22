@@ -13,6 +13,9 @@ public final class UserAuthDtos {
     public record LoginResponse(Long userId, String loginId, String displayName) {
     }
 
+    public record AuthResponse(Long userId, String loginId, String displayName, String accessToken, long expiresInSeconds) {
+    }
+
     public record CurrentUserResponse(Long userId, String loginId, String displayName) {
     }
 }

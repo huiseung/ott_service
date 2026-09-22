@@ -2,7 +2,7 @@ package com.domain.backend.user.presentation;
 
 import com.domain.backend.user.application.UserAuthDtos.CurrentUserResponse;
 import com.domain.backend.user.application.UserAuthDtos.LoginRequest;
-import com.domain.backend.user.application.UserAuthDtos.LoginResponse;
+import com.domain.backend.user.application.UserAuthDtos.AuthResponse;
 import com.domain.backend.user.application.UserAuthService;
 import com.domain.backend.user.application.UserPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,11 +27,16 @@ public class UserAuthController {
     }
 
     @PostMapping("/auth/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
         var result = authService.login(request, servletRequest);
         return ResponseEntity.ok()
                 .headers(result.headers())
                 .body(result.response());
+    }
+
+    @PostMapping("/auth/refresh")
+    public AuthResponse refresh(HttpServletRequest request) {
+        return authService.refresh(request);
     }
 
     @PostMapping("/auth/logout")
