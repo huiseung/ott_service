@@ -4,8 +4,9 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { userApi, type PlaybackStart } from "@/features/api";
 import { useAuth } from "@/features/auth/AuthProvider";
-import { ProgressReporter } from "@/features/player/ProgressReporter";
-import { ApiError, errorMessage } from "@/shared/apiClient";
+import { PlaybackAnalytics } from "@/features/analytics/PlaybackAnalytics";
+import { trackEvent } from "@/features/analytics/analytics";
+import { ApiError, errorMessage, getAccessToken } from "@/shared/apiClient";
 import { config } from "@/shared/config";
 
 const time = (seconds: number) => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}` : "0:00";
@@ -13,8 +14,8 @@ const time = (seconds: number) => Number.isFinite(seconds) ? `${Math.floor(secon
 export default function WatchPage({ params }: { params: Promise<{ videoId: string }> }) {
   const { videoId } = use(params); const id = Number(videoId); const router = useRouter();
   const { user, loading: authLoading, epoch } = useAuth();
-  const video = useRef<HTMLVideoElement>(null); const reporter = useRef<ProgressReporter | null>(null);
-  const applied = useRef(false); const lastSaved = useRef(0); const playhead = useRef(0);
+  const video = useRef<HTMLVideoElement>(null);
+  const applied = useRef(false);
   const [session, setSession] = useState<PlaybackStart | null>(null);
   const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
   const [buffering, setBuffering] = useState(false); const [playing, setPlaying] = useState(false);
@@ -38,45 +39,69 @@ export default function WatchPage({ params }: { params: Promise<{ videoId: strin
     const element = video.current;
     let active = true;
     let hls: import("hls.js").default | null = null;
-    applied.current = false; lastSaved.current = 0; playhead.current = 0;
-    reporter.current?.cancel();
-    const progress = new ProgressReporter(session.playbackSessionId, session.durationSeconds);
-    reporter.current = progress;
+    applied.current = false;
+    const playbackToken = getAccessToken();
+    const analytics = new PlaybackAnalytics(session.playbackSessionId, id, event => trackEvent(event, playbackToken));
+    const sample = () => ({ positionMs: Math.max(0, Number.isFinite(element.currentTime) ? element.currentTime * 1000 : 0),
+      durationMs: (Number.isFinite(element.duration) ? element.duration : session.durationSeconds) * 1000,
+      playbackRate: element.playbackRate, ended: element.ended });
+    analytics.record("PLAYBACK_SESSION_STARTED", sample());
     const seekResume = () => {
       if (applied.current || !Number.isFinite(element.duration) || element.duration <= 0) return;
       const target = Math.min(session.resumePositionSeconds, Math.max(0, element.duration - 1));
       if (target > 0) element.currentTime = target;
-      applied.current = true; playhead.current = target; setPosition(target); setDuration(element.duration);
+      applied.current = true; setPosition(target); setDuration(element.duration);
     };
-    const update = () => { if (applied.current) { playhead.current = element.currentTime; setPosition(element.currentTime); } };
-    const pause = () => { setPlaying(false); if (applied.current) progress.report(element.currentTime, "PAUSE"); };
-    const seeked = () => { update(); if (applied.current) progress.report(element.currentTime); };
-    const ended = () => { setPlaying(false); if (applied.current) progress.report(element.duration, "COMPLETE"); };
-    const pagehide = () => { if (applied.current) progress.leave(element.currentTime); };
+    const update = () => { if (applied.current) { analytics.sample(sample()); setPosition(element.currentTime); } };
+    const pause = () => { setPlaying(false); if (applied.current) analytics.pause(sample()); };
+    const seeking = () => analytics.seeking(sample());
+    const seeked = () => { analytics.seeked(sample()); update(); };
+    const ended = () => { setPlaying(false); analytics.ended(sample()); };
+    const pagehide = () => analytics.stop(sample(), "pagehide");
+    const waiting = () => { setBuffering(true); analytics.waiting(sample()); };
+    const playing = () => { setPlaying(true); setBuffering(false); analytics.playing(sample()); };
+    const play = () => analytics.playRequested();
+    const ratechange = () => analytics.record("PLAYBACK_RATE_CHANGED", sample());
+    const mediaError = () => analytics.error(sample(), "media", String(element.error?.code ?? "unknown"), true);
     element.addEventListener("loadedmetadata", seekResume);
     element.addEventListener("durationchange", seekResume);
     element.addEventListener("timeupdate", update);
     element.addEventListener("pause", pause);
+    element.addEventListener("seeking", seeking);
     element.addEventListener("seeked", seeked);
     element.addEventListener("ended", ended);
-    element.addEventListener("waiting", () => setBuffering(true));
-    element.addEventListener("playing", () => { setPlaying(true); setBuffering(false); });
-    window.addEventListener("pagehide", pagehide);
-    const heartbeat = setInterval(() => { if (applied.current && !element.paused && !element.seeking && !element.ended && element.readyState >= 3 && Math.abs(element.currentTime - lastSaved.current) >= 1) { lastSaved.current = element.currentTime; progress.report(element.currentTime); } }, 10000);
+    element.addEventListener("waiting", waiting);
+    element.addEventListener("playing", playing);
+    element.addEventListener("play", play);
+    element.addEventListener("ratechange", ratechange);
+    element.addEventListener("error", mediaError);
+    window.addEventListener("ott:analytics-pagehide", pagehide);
+    const heartbeat = setInterval(() => { if (applied.current && !element.paused && !element.seeking && !element.ended && element.readyState >= 3) analytics.record("HEARTBEAT", sample()); }, 10000);
     if (element.canPlayType("application/vnd.apple.mpegurl")) element.src = new URL(session.hlsUrl, config.apiBaseUrl).toString();
     else void import("hls.js").then(({ default: Hls }) => {
       if (!active) return;
-      if (!Hls.isSupported()) { setError("이 브라우저는 HLS 재생을 지원하지 않습니다."); return; }
-      hls = new Hls(); hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal && active) setError("재생 중 오류가 발생했습니다. 재시도하면 재생 권한을 갱신합니다."); });
+      if (!Hls.isSupported()) { analytics.error(sample(), "hls", "unsupported", true); setError("이 브라우저는 HLS 재생을 지원하지 않습니다."); return; }
+      hls = new Hls(); hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!active) return;
+        analytics.error(sample(), "hls", data.details, data.fatal);
+        if (data.fatal) setError("재생 중 오류가 발생했습니다. 재시도하면 재생 권한을 갱신합니다.");
+      });
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+        const level = hls?.levels[data.level];
+        if (active && level) analytics.record("QUALITY_CHANGED", sample(), {
+          bitrate: level.bitrate, resolution: `${level.width}x${level.height}` });
+      });
       hls.loadSource(new URL(session.hlsUrl, config.apiBaseUrl).toString()); hls.attachMedia(element);
-    }).catch(() => { if (active) setError("플레이어를 불러오지 못했습니다."); });
+    }).catch(() => { if (active) { analytics.error(sample(), "hls", "load_failed", true); setError("플레이어를 불러오지 못했습니다."); } });
     return () => {
-      active = false; clearInterval(heartbeat); window.removeEventListener("pagehide", pagehide);
+      active = false; clearInterval(heartbeat); window.removeEventListener("ott:analytics-pagehide", pagehide);
       element.removeEventListener("loadedmetadata", seekResume); element.removeEventListener("durationchange", seekResume);
       element.removeEventListener("timeupdate", update); element.removeEventListener("pause", pause);
-      element.removeEventListener("seeked", seeked); element.removeEventListener("ended", ended);
-      if (applied.current) progress.leave(element.currentTime); else progress.cancel();
-      reporter.current = null; element.pause(); hls?.destroy(); element.removeAttribute("src"); element.load();
+      element.removeEventListener("seeking", seeking); element.removeEventListener("seeked", seeked); element.removeEventListener("ended", ended);
+      element.removeEventListener("waiting", waiting); element.removeEventListener("playing", playing);
+      element.removeEventListener("play", play); element.removeEventListener("ratechange", ratechange); element.removeEventListener("error", mediaError);
+      analytics.stop(sample(), "unmount");
+      element.pause(); hls?.destroy(); element.removeAttribute("src"); element.load();
     };
   }, [session, id, epoch]);
   if (!Number.isSafeInteger(id) || id < 1) return <p className="error">유효하지 않은 영상 ID입니다.</p>;
