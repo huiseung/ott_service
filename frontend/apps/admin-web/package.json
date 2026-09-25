@@ -6,7 +6,10 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start --port 3001",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:collection": "node --test src/features/collection/api/*.test.mjs",
+    "test": "node --test src/features/collection/api/*.test.mjs src/shared/lib/*.test.mjs src/features/analytics/*.test.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "hls.js": "^1.7.3",

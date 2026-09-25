@@ -6,7 +6,8 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test src/features/analytics/*.test.mjs"
   },
   "dependencies": {
     "hls.js": "^1.7.3",
