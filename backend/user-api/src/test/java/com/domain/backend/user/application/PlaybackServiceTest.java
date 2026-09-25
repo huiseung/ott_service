@@ -5,6 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.domain.backend.media.domain.MediaPackage;
 import com.domain.backend.media.infrastructure.persistence.MediaPackageRepository;
@@ -21,8 +24,38 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 class PlaybackServiceTest {
+
+    @Test
+    void refusesUnavailableContentBeforeCreatingPlaybackSession() {
+        var videos = mock(VideoRepository.class);
+        var sessions = mock(PlaybackSessionRepository.class);
+        var eligibility = mock(ContentEligibility.class);
+        doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND))
+                .when(eligibility).requirePlayable(100L);
+        var service = new PlaybackService(videos, mock(MediaPackageRepository.class), sessions,
+                mock(PlaybackResumeService.class), mock(WatchEventPublisher.class), new UserSecurityProperties(), eligibility);
+        assertThatThrownBy(() -> service.start(100L, new UserPrincipal(7L, "user", "User")))
+                .isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(videos, sessions);
+    }
+
+    @Test
+    void rechecksAvailabilityForExistingPlaybackSessions() {
+        var sessions = mock(PlaybackSessionRepository.class);
+        var eligibility = mock(ContentEligibility.class);
+        when(sessions.findBySessionTokenAndExpiresAtAfter(any(), any())).thenReturn(Optional.of(
+                new PlaybackSession("session", 7L, 100L, 200L, Instant.now().plusSeconds(60))));
+        doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND))
+                .when(eligibility).requirePlayable(100L);
+        var service = new PlaybackService(mock(VideoRepository.class), mock(MediaPackageRepository.class), sessions,
+                mock(PlaybackResumeService.class), mock(WatchEventPublisher.class), new UserSecurityProperties(), eligibility);
+        assertThatThrownBy(() -> service.requirePlaybackSession("session", new UserPrincipal(7L, "user", "User")))
+                .isInstanceOf(ResponseStatusException.class);
+    }
 
     @Test
     void createsSessionWithResumePositionFromServerSidePrincipal() {
@@ -34,7 +67,7 @@ class PlaybackServiceTest {
         var properties = new UserSecurityProperties();
         properties.setPlaybackSessionTtl(java.time.Duration.ofHours(6));
         PlaybackService service = new PlaybackService(videoRepository, mediaPackageRepository, sessionRepository,
-                resumeService, eventPublisher, properties);
+                resumeService, eventPublisher, properties, mock(ContentEligibility.class));
 
         Video video = readyVideo(100L, 200L);
         MediaPackage mediaPackage = mediaPackage(200L, 3_600_000L);
@@ -59,7 +92,7 @@ class PlaybackServiceTest {
         var eventPublisher = mock(WatchEventPublisher.class);
         var properties = new UserSecurityProperties();
         PlaybackService service = new PlaybackService(videoRepository, mediaPackageRepository, sessionRepository,
-                resumeService, eventPublisher, properties);
+                resumeService, eventPublisher, properties, mock(ContentEligibility.class));
 
         PlaybackSession session = new PlaybackSession("session-1", 7L, 100L, 200L, Instant.now().plusSeconds(60));
         ReflectionTestUtils.setField(session, "id", 55L);

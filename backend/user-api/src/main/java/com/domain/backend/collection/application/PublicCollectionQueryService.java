@@ -4,6 +4,7 @@ import com.domain.backend.collection.application.PublicCollectionDtos.Collection
 import com.domain.backend.collection.application.PublicCollectionDtos.CollectionResponse;
 import com.domain.backend.collection.application.PublicCollectionDtos.CollectionVideoItem;
 import com.domain.backend.collection.domain.VideoCollectionType;
+import com.domain.backend.user.application.ContentEligibility;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -12,9 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PublicCollectionQueryService {
 
+    private final ContentEligibility eligibility;
     private final JdbcTemplate jdbcTemplate;
 
-    public PublicCollectionQueryService(JdbcTemplate jdbcTemplate) {
+    public PublicCollectionQueryService(JdbcTemplate jdbcTemplate, ContentEligibility eligibility) {
+        this.eligibility = eligibility;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -44,13 +47,15 @@ public class PublicCollectionQueryService {
     @Transactional(readOnly = true)
     public List<CollectionVideoItem> listCollectionVideos(Long collectionId, Integer size) {
         int limit = Math.max(1, Math.min(size == null ? 20 : size, 100));
+        Object[] window = eligibility.parameters();
         return jdbcTemplate.query("""
                         select v.id, v.title, p.duration_ms
                         from video_collection_items i
                         join videos v on v.id = i.video_id
                         join media_packages p on p.id = v.published_media_package_id
                         join video_collections c on c.id = i.collection_id
-                        where i.collection_id = ?
+                        """ + ContentEligibility.JOINS + " where " + ContentEligibility.PREDICATE + """
+                          and i.collection_id = ?
                           and c.enabled = true
                           and v.status = 'READY'
                           and p.status = 'READY'
@@ -63,7 +68,7 @@ public class PublicCollectionQueryService {
                         rs.getString("title"),
                         rs.getLong("duration_ms")
                 ),
-                collectionId,
+                window[0], window[1], window[2], window[3], collectionId,
                 limit);
     }
 }

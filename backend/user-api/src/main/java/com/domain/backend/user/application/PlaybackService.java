@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class PlaybackService {
 
+    private final ContentEligibility eligibility;
     private final VideoRepository videoRepository;
     private final MediaPackageRepository mediaPackageRepository;
     private final PlaybackSessionRepository playbackSessionRepository;
@@ -31,7 +32,8 @@ public class PlaybackService {
     public PlaybackService(VideoRepository videoRepository, MediaPackageRepository mediaPackageRepository,
                            PlaybackSessionRepository playbackSessionRepository,
                            PlaybackResumeService resumeService, WatchEventPublisher eventPublisher,
-                           UserSecurityProperties properties) {
+                           UserSecurityProperties properties, ContentEligibility eligibility) {
+        this.eligibility = eligibility;
         this.videoRepository = videoRepository;
         this.mediaPackageRepository = mediaPackageRepository;
         this.playbackSessionRepository = playbackSessionRepository;
@@ -42,6 +44,7 @@ public class PlaybackService {
 
     @Transactional
     public PlaybackStartResponse start(Long videoId, UserPrincipal principal) {
+        eligibility.requirePlayable(videoId);
         var video = videoRepository.findById(videoId)
                 .filter(candidate -> candidate.getStatus() == VideoStatus.READY && candidate.getPublishedMediaPackageId() != null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Playable video not found"));
@@ -70,7 +73,6 @@ public class PlaybackService {
         );
     }
 
-    @Transactional(readOnly = true)
     public WatchEventResponse publishEvent(String playbackSessionToken, WatchEventRequest request, UserPrincipal principal) {
         var playbackSession = playbackSessionRepository.findBySessionTokenAndExpiresAtAfter(playbackSessionToken, Instant.now())
                 .filter(session -> session.getUserId().equals(principal.userId()))
@@ -101,9 +103,11 @@ public class PlaybackService {
     }
 
     public PlaybackSession requirePlaybackSession(String playbackSessionToken, UserPrincipal principal) {
-        return playbackSessionRepository.findBySessionTokenAndExpiresAtAfter(playbackSessionToken, Instant.now())
-                .filter(session -> session.getUserId().equals(principal.userId()))
+        var session = playbackSessionRepository.findBySessionTokenAndExpiresAtAfter(playbackSessionToken, Instant.now())
+                .filter(candidate -> candidate.getUserId().equals(principal.userId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Playback session is not accessible"));
+        eligibility.requirePlayable(session.getVideoId());
+        return session;
     }
 
     private long normalizedPosition(WatchEventType eventType, long positionSeconds, long durationSeconds) {

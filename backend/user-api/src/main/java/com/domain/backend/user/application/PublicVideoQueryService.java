@@ -16,9 +16,11 @@ public class PublicVideoQueryService {
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 50;
 
+    private final ContentEligibility eligibility;
     private final JdbcTemplate jdbcTemplate;
 
-    public PublicVideoQueryService(JdbcTemplate jdbcTemplate) {
+    public PublicVideoQueryService(JdbcTemplate jdbcTemplate, ContentEligibility eligibility) {
+        this.eligibility = eligibility;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -26,11 +28,13 @@ public class PublicVideoQueryService {
     public VideoListResponse listVideos(Long cursor, Integer size) {
         int limit = Math.max(1, Math.min(size == null ? DEFAULT_SIZE : size, MAX_SIZE));
         Long effectiveCursor = cursor == null ? Long.MAX_VALUE : cursor;
+        Object[] window = eligibility.parameters();
         List<VideoListItem> rows = jdbcTemplate.query("""
                         select v.id, v.title
                         from videos v
                         join media_packages p on p.id = v.published_media_package_id
-                        where v.status = 'READY'
+                        """ + ContentEligibility.JOINS + " where " + ContentEligibility.PREDICATE + """
+                          and v.status = 'READY'
                           and p.status = 'READY'
                           and v.published_media_package_id is not null
                           and v.id < ?
@@ -38,6 +42,7 @@ public class PublicVideoQueryService {
                         limit ?
                         """,
                 (rs, rowNum) -> new VideoListItem(rs.getLong("id"), rs.getString("title")),
+                window[0], window[1], window[2], window[3],
                 effectiveCursor,
                 limit + 1);
         boolean hasNext = rows.size() > limit;
@@ -48,6 +53,7 @@ public class PublicVideoQueryService {
 
     @Transactional(readOnly = true)
     public VideoDetailResponse getVideo(Long videoId) {
+        eligibility.requirePlayable(videoId);
         return jdbcTemplate.query("""
                         select v.id, v.title, p.duration_ms
                         from videos v
