@@ -1,0 +1,83 @@
+# Shared worker definitions, extended by both repository Compose entrypoints.
+x-archive-environment: &archive-environment
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  ANALYTICS_PLAYBACK_TOPIC: ${ANALYTICS_PLAYBACK_TOPIC:-playback-events}
+  ANALYTICS_BEHAVIOR_TOPIC: ${ANALYTICS_BEHAVIOR_TOPIC:-behavior-events}
+  ANALYTICS_SUBSCRIPTION_TOPIC: ${ANALYTICS_SUBSCRIPTION_TOPIC:-subscription-events}
+  ARCHIVE_CONSUMER_GROUP: ${ARCHIVE_CONSUMER_GROUP:-raw-event-archive}
+  ARCHIVE_ROOT: s3://event-lake
+  ARCHIVE_FILE_SIZE: ${ARCHIVE_FILE_SIZE:-128 MB}
+  ARCHIVE_ROLLOVER_INTERVAL: ${ARCHIVE_ROLLOVER_INTERVAL:-60 s}
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+  AWS_REGION: us-east-1
+  FLINK_PROPERTIES: |
+    jobmanager.rpc.address: archive-jobmanager
+    rest.address: archive-jobmanager
+    rest.bind-address: 0.0.0.0
+    jobmanager.memory.process.size: 1024m
+    taskmanager.memory.process.size: 1536m
+    taskmanager.numberOfTaskSlots: 2
+    parallelism.default: 1
+    execution.checkpointing.interval: ${ARCHIVE_CHECKPOINT_INTERVAL:-60 s}
+    execution.checkpointing.mode: EXACTLY_ONCE
+    execution.checkpointing.timeout: 120 s
+    execution.checkpointing.max-concurrent-checkpoints: 1
+    execution.checkpointing.min-pause: 5 s
+    execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+    state.checkpoint-storage: filesystem
+    state.checkpoints.dir: s3://event-lake/_flink/checkpoints
+    state.savepoints.dir: s3://event-lake/_flink/savepoints
+    state.checkpoints.num-retained: 3
+    restart-strategy.type: fixed-delay
+    restart-strategy.fixed-delay.attempts: 3
+    restart-strategy.fixed-delay.delay: 10 s
+    s3.endpoint: http://minio:9000
+    s3.path.style.access: true
+    s3.connection.ssl.enabled: false
+
+services:
+  archive-kafka-init:
+    image: apache/kafka:3.7.0
+    depends_on:
+      kafka:
+        condition: service_started
+    environment:
+      PLAYBACK_TOPIC: ${ANALYTICS_PLAYBACK_TOPIC:-playback-events}
+      BEHAVIOR_TOPIC: ${ANALYTICS_BEHAVIOR_TOPIC:-behavior-events}
+      SUBSCRIPTION_TOPIC: ${ANALYTICS_SUBSCRIPTION_TOPIC:-subscription-events}
+      PARTITIONS: ${ANALYTICS_PARTITIONS:-12}
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        for attempt in {1..60}; do
+          if /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list >/dev/null 2>&1; then break; fi
+          sleep 2;
+        done;
+        for topic in "$$PLAYBACK_TOPIC" "$$BEHAVIOR_TOPIC" "$$SUBSCRIPTION_TOPIC"; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists \
+            --topic "$$topic" --partitions "$$PARTITIONS" --replication-factor 1;
+        done;
+
+  archive-jobmanager:
+    image: ott-event-archive:local
+    entrypoint: ["/bin/bash", "/opt/flink/bin/start-archive.sh"]
+    environment:
+      <<: *archive-environment
+      ARCHIVE_RESTORE_PATH: ${ARCHIVE_RESTORE_PATH:-}
+    depends_on:
+      archive-kafka-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "8082:8081"
+
+  archive-taskmanager:
+    image: ott-event-archive:local
+    command: taskmanager
+    environment: *archive-environment
+    depends_on:
+      archive-jobmanager:
+        condition: service_started
