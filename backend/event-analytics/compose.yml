@@ -1,0 +1,96 @@
+x-analytics-environment: &analytics-environment
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  ANALYTICS_PLAYBACK_TOPIC: ${ANALYTICS_PLAYBACK_TOPIC:-playback-events}
+  ANALYTICS_BEHAVIOR_TOPIC: ${ANALYTICS_BEHAVIOR_TOPIC:-behavior-events}
+  ANALYTICS_SUBSCRIPTION_TOPIC: ${ANALYTICS_SUBSCRIPTION_TOPIC:-subscription-events}
+  ANALYTICS_CONSUMER_GROUP: ${ANALYTICS_CONSUMER_GROUP:-content-analytics}
+  ANALYTICS_BATCH_ROWS: ${ANALYTICS_BATCH_ROWS:-1000}
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER:?Set CLICKHOUSE_USER in .env}
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+  AWS_REGION: us-east-1
+  FLINK_PROPERTIES: |
+    jobmanager.rpc.address: analytics-jobmanager
+    rest.address: analytics-jobmanager
+    rest.bind-address: 0.0.0.0
+    jobmanager.memory.process.size: 1024m
+    taskmanager.memory.process.size: 1536m
+    taskmanager.numberOfTaskSlots: 2
+    parallelism.default: 1
+    execution.checkpointing.interval: ${ANALYTICS_CHECKPOINT_INTERVAL:-30 s}
+    execution.checkpointing.mode: EXACTLY_ONCE
+    execution.checkpointing.timeout: 120 s
+    execution.checkpointing.min-pause: 5 s
+    execution.checkpointing.max-concurrent-checkpoints: 1
+    execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+    state.checkpoint-storage: filesystem
+    state.checkpoints.dir: s3://event-lake/_flink/analytics/checkpoints
+    state.savepoints.dir: s3://event-lake/_flink/analytics/savepoints
+    state.checkpoints.num-retained: 3
+    restart-strategy.type: fixed-delay
+    restart-strategy.fixed-delay.attempts: 3
+    restart-strategy.fixed-delay.delay: 10 s
+    s3.endpoint: http://minio:9000
+    s3.path.style.access: true
+    s3.connection.ssl.enabled: false
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    environment:
+      CLICKHOUSE_DB: analytics
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?Set CLICKHOUSE_USER in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "127.0.0.1:8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  clickhouse-init:
+    image: clickhouse/clickhouse-server:25.8
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?Set CLICKHOUSE_USER in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - 'for migration in /schema/*.sql; do clickhouse-client --host clickhouse --user "$$CLICKHOUSE_USER" --password "$$CLICKHOUSE_PASSWORD" --multiquery < "$$migration"; done'
+
+  analytics-jobmanager:
+    image: ott-event-analytics:local
+    entrypoint: ["/bin/bash", "/opt/flink/bin/start-analytics.sh"]
+    environment:
+      <<: *analytics-environment
+      ANALYTICS_RESTORE_PATH: ${ANALYTICS_RESTORE_PATH:-}
+    depends_on:
+      archive-kafka-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      clickhouse-init:
+        condition: service_completed_successfully
+    ports:
+      - "8083:8081"
+
+  analytics-taskmanager:
+    image: ott-event-analytics:local
+    command: taskmanager
+    environment: *analytics-environment
+    depends_on:
+      analytics-jobmanager:
+        condition: service_started

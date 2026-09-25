@@ -16,20 +16,26 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql --protocol=TCP -h127.0.0.1 -u\"$$MYSQL_USER\" -D ott_service -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   mysql-init:
     image: mysql:8.0
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER in .env}
+      MYSQL_PWD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
     entrypoint:
       - /bin/sh
-      - -c
+      - -ec
       - |
-        until mysqladmin ping -hmysql -uroot -p$$MYSQL_ROOT_PASSWORD --silent; do sleep 1; done;
-        mysql -hmysql -uroot -p$$MYSQL_ROOT_PASSWORD -e 'create database if not exists ott_service character set utf8mb4 collate utf8mb4_0900_ai_ci';
-        exit 0;
+        mysql --protocol=TCP -hmysql -u"$$MYSQL_USER" -D ott_service -e 'SELECT 1';
 
   minio:
     image: quay.io/minio/minio:RELEASE.2024-01-16T16-07-38Z
@@ -53,11 +59,12 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
     entrypoint:
       - /bin/sh
-      - -c
+      - -ec
       - |
         until mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do sleep 1; done;
         mc mb --ignore-existing local/ott-originals;
-        exit 0;
+        mc mb --ignore-existing local/event-lake;
+
 
   redis:
     image: redis:7.2-alpine
@@ -75,9 +82,10 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_NUM_PARTITIONS: ${WATCH_EVENTS_PARTITIONS:-12}
@@ -88,43 +96,92 @@ services:
     volumes:
       - kafka-data:/bitnami/kafka
 
+  clickhouse:
+    extends:
+      file: ./event-analytics/compose.yml
+      service: clickhouse
+
+  clickhouse-init:
+    extends:
+      file: ./event-analytics/compose.yml
+      service: clickhouse-init
+    volumes:
+      - ./event-analytics/clickhouse:/schema:ro
+
+  analytics-jobmanager:
+    extends:
+      file: ./event-analytics/compose.yml
+      service: analytics-jobmanager
+    build:
+      context: .
+      dockerfile: event-analytics/Dockerfile
+
+  analytics-taskmanager:
+    extends:
+      file: ./event-analytics/compose.yml
+      service: analytics-taskmanager
+
+  archive-kafka-init:
+    extends:
+      file: ./event-archive/compose.yml
+      service: archive-kafka-init
+
+  archive-jobmanager:
+    extends:
+      file: ./event-archive/compose.yml
+      service: archive-jobmanager
+    build:
+      context: .
+      dockerfile: event-archive/Dockerfile
+
+  archive-taskmanager:
+    extends:
+      file: ./event-archive/compose.yml
+      service: archive-taskmanager
+
   playback-worker:
     build:
       context: .
       dockerfile: playback-worker/Dockerfile
     depends_on:
-      - mysql-init
-      - redis
-      - kafka
+      mysql-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:?Set MYSQL_USER in .env}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      PLAYBACK_WORKER_WATCH_EVENTS_TOPIC: ${WATCH_EVENTS_TOPIC:-watch-events}
-      PLAYBACK_WORKER_WATCH_EVENTS_DLQ_TOPIC: ${WATCH_EVENTS_DLQ_TOPIC:-watch-events.dlq}
-      PLAYBACK_WORKER_CONSUMER_GROUP_ID: ${PLAYBACK_CONSUMER_GROUP:-playback-progress-group}
+      DB_URL: jdbc:mysql://mysql:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      WATCH_EVENTS_TOPIC: ${WATCH_EVENTS_TOPIC:-watch-events}
+      WATCH_EVENTS_DLQ_TOPIC: ${WATCH_EVENTS_DLQ_TOPIC:-watch-events.dlq}
+      PLAYBACK_CONSUMER_GROUP: ${PLAYBACK_CONSUMER_GROUP:-playback-progress-group}
 
   media-worker:
     build:
       context: .
       dockerfile: media-worker/Dockerfile
     depends_on:
-      - mysql-init
-      - minio-init
+      mysql-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:?Set MYSQL_USER in .env}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
-      APP_STORAGE_ENDPOINT: http://minio:9000
-      APP_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
-      APP_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      DB_URL: jdbc:mysql://mysql:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      STORAGE_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
       MEDIA_WORKER_SCRATCH_DIRECTORY: /work/jobs
     volumes:
       - worker-scratch:/work/jobs
 
 volumes:
+  clickhouse-data:
   mysql-data:
   minio-data:
   redis-data:
