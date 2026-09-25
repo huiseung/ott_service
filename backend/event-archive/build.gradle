@@ -1,0 +1,26 @@
+def flinkVersion = '1.20.3'
+
+configurations { archiveLibs }
+
+dependencies {
+    compileOnly "org.apache.flink:flink-table-api-java:${flinkVersion}"
+    archiveLibs("org.apache.flink:flink-sql-connector-kafka:3.4.0-1.20") { transitive = false }
+    archiveLibs("org.apache.flink:flink-sql-parquet:${flinkVersion}") { transitive = false }
+    // Parquet uses Hadoop APIs; the isolated S3 filesystem plugin cannot provide these to SQL.
+    archiveLibs('org.apache.hadoop:hadoop-client-api:3.3.6') { transitive = false }
+    archiveLibs('org.apache.hadoop:hadoop-client-runtime:3.3.6') { transitive = false }
+}
+
+tasks.withType(JavaCompile).configureEach { options.release = 17 }
+
+jar {
+    archiveFileName = 'event-archive.jar'
+    manifest { attributes 'Main-Class': 'com.domain.backend.archive.RawArchiveJob' }
+}
+
+tasks.register('archiveDistribution', Sync) {
+    dependsOn jar
+    into layout.buildDirectory.dir('distribution')
+    from(tasks.named('jar'))
+    into('lib') { from configurations.archiveLibs }
+}

@@ -1,0 +1,26 @@
+def flinkVersion = '1.20.3'
+configurations { analyticsLibs }
+dependencies {
+    compileOnly "org.apache.flink:flink-streaming-java:${flinkVersion}"
+    compileOnly 'org.apache.flink:flink-connector-kafka:3.4.0-1.20'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
+    analyticsLibs('org.apache.flink:flink-sql-connector-kafka:3.4.0-1.20') { transitive = false }
+    testImplementation "org.apache.flink:flink-streaming-java:${flinkVersion}"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+tasks.withType(JavaCompile).configureEach { options.release = 17 }
+test {
+    environment 'CLICKHOUSE_USER', 'test-user'
+    environment 'CLICKHOUSE_PASSWORD', 'test-only-password'
+}
+jar {
+    archiveFileName = 'event-analytics.jar'
+    manifest { attributes 'Main-Class': 'com.domain.backend.analyticsjob.AnalyticsJob' }
+}
+tasks.register('analyticsDistribution', Sync) {
+    dependsOn jar
+    into layout.buildDirectory.dir('distribution')
+    from(tasks.named('jar'))
+    into('lib') { from configurations.analyticsLibs, configurations.runtimeClasspath }
+}
