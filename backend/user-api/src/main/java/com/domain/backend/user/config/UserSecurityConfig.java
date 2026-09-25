@@ -30,6 +30,7 @@ public class UserSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/analytics/events/batch").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/refresh").permitAll()
                         .requestMatchers("/api/auth/logout").permitAll()
@@ -55,6 +56,7 @@ public class UserSecurityConfig {
         source.registerCorsConfiguration("/api/user/**", userConfiguration);
         source.registerCorsConfiguration("/api/playback/**", userConfiguration);
         source.registerCorsConfiguration("/api/public/**", userConfiguration);
+        source.registerCorsConfiguration("/api/analytics/**", userConfiguration);
         return source;
     }
 
