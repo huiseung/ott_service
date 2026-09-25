@@ -4,9 +4,9 @@ spring:
   main:
     web-application-type: none
   datasource:
-    url: jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USERNAME:ott}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${MYSQL_USER:ott}
+    password: ${MYSQL_PASSWORD}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
       connection-timeout: 2000
@@ -33,11 +33,11 @@ spring:
         max.poll.interval.ms: 300000
         spring.json.trusted.packages: com.domain.backend.playback.event,com.domain.backend.playback.domain,java.util,java.time
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
     producer:
       acks: all
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
 
 management:
   endpoints:

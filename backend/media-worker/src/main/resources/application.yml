@@ -4,9 +4,9 @@ spring:
   main:
     web-application-type: none
   datasource:
-    url: jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USERNAME:ott}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${MYSQL_USER:ott}
+    password: ${MYSQL_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -18,9 +18,9 @@ app:
   storage:
     bucket: ott-originals
     region: us-east-1
-    endpoint: http://localhost:9000
-    access-key: ${STORAGE_ACCESS_KEY}
-    secret-key: ${STORAGE_SECRET_KEY}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ROOT_USER}
+    secret-key: ${MINIO_ROOT_PASSWORD}
     path-style-access: true
     presigned-url-ttl: 15m
     minimum-part-size: 16MB
@@ -40,7 +40,7 @@ media:
     lease-duration: 60s
     progress-update-interval: 3s
     max-attempts: 3
-    scratch-directory: ./work/jobs
+    scratch-directory: ${MEDIA_WORKER_SCRATCH_DIRECTORY:./work/jobs}
     minimum-free-disk: 2GB
     ffmpeg-timeout: 2h
     package-upload-concurrency: 4

@@ -2,9 +2,9 @@ spring:
   application:
     name: ott-user-api
   datasource:
-    url: jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USERNAME:ott}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${MYSQL_USER:ott}
+    password: ${MYSQL_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -32,7 +32,7 @@ spring:
         request.timeout.ms: 1000
         linger.ms: 5
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
 
 server:
   port: 8081
@@ -49,8 +49,18 @@ management:
         enabled: true
 
 app:
+  analytics:
+    playback-topic: ${ANALYTICS_PLAYBACK_TOPIC:playback-events}
+    behavior-topic: ${ANALYTICS_BEHAVIOR_TOPIC:behavior-events}
+    subscription-topic: ${ANALYTICS_SUBSCRIPTION_TOPIC:subscription-events}
+    partitions: ${ANALYTICS_PARTITIONS:12}
+  subscription:
+    local-activation-enabled: ${LOCAL_SUBSCRIPTION_ACTIVATION_ENABLED:false}
+    outbox-enabled: ${SUBSCRIPTION_OUTBOX_ENABLED:true}
+  catalog:
+    country: ${CATALOG_COUNTRY:KR}
   security:
-    user-web-origin: http://localhost:3000
+    user-web-origin: ${USER_WEB_ORIGIN:http://localhost:3000}
   user-security:
     cookie-name: OTT_USER_SESSION
     session-ttl: 7d
@@ -71,10 +81,10 @@ app:
   storage:
     bucket: ott-originals
     region: us-east-1
-    endpoint: http://localhost:9000
-    public-endpoint: http://localhost:9000
-    access-key: ${STORAGE_ACCESS_KEY}
-    secret-key: ${STORAGE_SECRET_KEY}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ROOT_USER}
+    secret-key: ${MINIO_ROOT_PASSWORD}
     path-style-access: true
     presigned-url-ttl: 15m
     minimum-part-size: 16MB

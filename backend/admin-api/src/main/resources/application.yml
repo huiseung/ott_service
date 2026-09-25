@@ -2,9 +2,9 @@ spring:
   application:
     name: ott-admin-api
   datasource:
-    url: jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USERNAME:ott}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/ott_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${MYSQL_USER:ott}
+    password: ${MYSQL_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -16,17 +16,21 @@ server:
   port: 8080
 
 app:
+  analytics:
+    url: ${ANALYTICS_QUERY_URL:http://localhost:8123}
+    user: ${CLICKHOUSE_USER:}
+    password: ${CLICKHOUSE_PASSWORD:}
   security:
     admin-username: ${ADMIN_USERNAME:admin}
     admin-password: ${ADMIN_PASSWORD}
-    admin-web-origin: http://localhost:3001
+    admin-web-origin: ${ADMIN_WEB_ORIGIN:http://localhost:3001}
   storage:
     bucket: ott-originals
     region: us-east-1
-    endpoint: http://localhost:9000
-    public-endpoint: http://localhost:9000
-    access-key: ${STORAGE_ACCESS_KEY}
-    secret-key: ${STORAGE_SECRET_KEY}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ROOT_USER}
+    secret-key: ${MINIO_ROOT_PASSWORD}
     path-style-access: true
     presigned-url-ttl: 15m
     minimum-part-size: 16MB
