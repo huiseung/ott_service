@@ -12,7 +12,7 @@ import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -27,11 +27,29 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+                .csrf(Customizer.withDefaults())
                 .cors(Customizer.withDefaults())
+                .requestCache(cache -> cache.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/admin/auth/csrf", "/api/admin/auth/login").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
+                .formLogin(form -> form
+                        .loginProcessingUrl("/api/admin/auth/login")
+                        .successHandler((request, response, authentication) -> response.setStatus(204))
+                        .failureHandler((request, response, exception) -> response.setStatus(401)))
+                .logout(logout -> logout
+                        .logoutUrl("/api/admin/auth/logout")
+                        .deleteCookies("OTT_ADMIN_SESSION")
+                        .logoutSuccessHandler((request, response, authentication) -> response.setStatus(204)))
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint((request, response, exception) -> response.setStatus(401))
+                        .accessDeniedHandler((request, response, exception) -> {
+                            response.setStatus(403);
+                            response.setContentType("application/json");
+                            response.getWriter().write(exception instanceof CsrfException
+                                    ? "{\"code\":\"CSRF_INVALID\"}" : "{\"code\":\"FORBIDDEN\"}");
+                        }))
                 .httpBasic(Customizer.withDefaults())
                 .build();
     }
@@ -41,8 +59,8 @@ public class SecurityConfig {
             @Value("${app.security.admin-web-origin:http://localhost:3001}") String adminWebOrigin) {
         var configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(adminWebOrigin));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key", "Range", "X-XSRF-TOKEN"));
+        configuration.setAllowedMethods(List.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key", "Range", "X-CSRF-TOKEN"));
         configuration.setExposedHeaders(List.of("Accept-Ranges", "Content-Length", "Content-Range"));
         configuration.setAllowCredentials(true);
         var source = new UrlBasedCorsConfigurationSource();
