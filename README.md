@@ -303,12 +303,21 @@ Spring은 `.env` 파일을 자동으로 읽지 않는다.
 
 ### 전체 스택 실행
 
+저장소 루트에서 아래 명령을 실행한다. `backend`에서 `./gradlew clean build` 한 번으로 모든 Backend 컨테이너에 필요한 실행 JAR과 Flink 배포 파일을 생성한다. Windows PowerShell에서는 `.\gradlew.bat clean build`를 사용한다.
+
+- `admin-api`, `user-api`, `media-worker`, `playback-worker`: 각 모듈의 `build/libs/`에 실행 JAR 생성.
+- `event-archive`, `event-analytics`: 각 모듈의 `build/distribution/`에 작업 JAR과 `lib/` 의존 라이브러리 생성. 배포 작업은 기본 빌드에 연결되어 별도로 지정할 필요가 없다.
+
+`build`는 테스트도 실행한다. 빌드가 성공한 뒤 Docker Compose로 이미지를 빌드하고 컨테이너를 실행한다.
+
 Backend Dockerfile은 미리 빌드한 JAR을 복사한다. Java 코드나 `application.yml`을 변경했다면
 Compose 실행 전에 JAR을 다시 빌드해야 한다. `docker compose up --build`만으로는 JAR이 갱신되지 않는다.
 
 ```powershell
-.\backend\gradlew.bat -p backend :admin-api:bootJar :user-api:bootJar :media-worker:bootJar :playback-worker:bootJar :event-archive:archiveDistribution :event-analytics:analyticsDistribution
-if ($LASTEXITCODE -ne 0) { throw "Backend JAR build failed" }
+cd backend
+.\gradlew.bat clean build
+if ($LASTEXITCODE -ne 0) { throw "Backend build failed" }
+cd ..
 docker compose --env-file .env up -d --build
 ```
 
@@ -381,7 +390,8 @@ copy .env.example .env
 
 ```powershell
 cd ~\ott_service\backend
-.\gradlew.bat clean build :event-archive:archiveDistribution :event-analytics:analyticsDistribution
+.\gradlew.bat clean build
+if ($LASTEXITCODE -ne 0) { throw "Backend build failed" }
 ```
 
 ```powershell
