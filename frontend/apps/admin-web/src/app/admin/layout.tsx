@@ -1,5 +1,9 @@
 import { Sidebar } from "@/shared/components/Sidebar";
-import { AuthGate } from "@/shared/components/AuthGate";
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return <AuthGate><div className="shell"><Sidebar /><main className="main"><header className="topbar"><span>OTT / OPERATIONS</span><span className="online"><i /> ADMIN API</span></header><div className="content">{children}</div></main></div></AuthGate>;
+import { AuthGate, AdminAccount } from "@/shared/components/AuthGate";
+import { readAdminSession } from "@/shared/lib/adminSession";
+import { redirect } from "next/navigation";
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const session = await readAdminSession();
+  if (!session) redirect("/login");
+  return <AuthGate username={session.username}><div className="shell"><Sidebar /><main className="main"><header className="topbar"><span>OTT / OPERATIONS</span><AdminAccount /></header><div className="content">{children}</div></main></div></AuthGate>;
 }

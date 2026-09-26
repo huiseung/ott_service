@@ -4,7 +4,9 @@
 
 `frontend`에서 `pnpm install` 후 `pnpm dev:admin`을 실행한다. 기본 주소는 `http://localhost:3001`이다. `apps/admin-web/.env.local.example`을 `.env.local`로 복사해 브라우저에서 접근 가능한 Admin API 주소를 지정한다. 루트 `docker-compose.yml`은 기존 backend 서비스를 포함하고 admin-web을 3001 포트로 실행한다.
 
-Backend는 현재 HTTP Basic 관리자 인증을 사용한다. 콘솔에서 입력한 인증 정보는 탭 메모리에만 있다. 새로고침하면 다시 입력한다. 이 기능은 운영용 인증 시스템을 대신하지 않는다.
+첫 접속은 `/login`에서 시작한다. 서버가 계정을 검증하고 HttpOnly `OTT_ADMIN_SESSION` 쿠키로 세션을 유지하므로 새로고침해도 로그인이 유지된다. 비밀번호는 브라우저 저장소에 저장하지 않는다. 세션은 기본 8시간 비활성 시 만료되며 백엔드 재시작 시 다시 로그인해야 한다. `/admin/**`는 서버에서 세션을 확인하고, 모든 관리자 화면 상단에 계정과 로그아웃 버튼을 표시한다. 로그아웃은 서버 세션을 무효화한다.
+
+API 요청에는 세션 쿠키를 포함하며, 변경 요청과 로그인/로그아웃 전에 `/api/admin/auth/csrf`에서 받은 토큰을 헤더로 전송한다. CSRF 보호는 유지한다. 서버 측 세션 확인에 사용하는 `ADMIN_API_INTERNAL_URL`은 Docker 실행 시 `http://admin-api:8080`, IDE 개발 시 기본 `http://localhost:8080`이다.
 
 ## 실제 API 계약
 

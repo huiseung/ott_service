@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useEffect, useRef, useState } from "react";
 import { adminVideoApi, type AdminVideoDetail } from "@/features/video/api/adminVideoApi";
-import { apiRequest, getAdminAuthorization, userError } from "@/shared/lib/apiClient";
+import { apiRequest, userError } from "@/shared/lib/apiClient";
 import { config } from "@/shared/lib/config";
 
 type Playback = { manifestUrl: string; durationMs: number; signedUrlTtlSeconds: number };
@@ -56,10 +56,7 @@ export default function WatchPage({ params }: { params: Promise<{ videoId: strin
           startPosition: resumeAt,
           xhrSetup: (xhr, url) => {
             xhr.open("GET", url, true);
-            const authorization = getAdminAuthorization();
-            if (authorization && new URL(url, manifest).origin === new URL(config.adminApiBaseUrl).origin) {
-              xhr.setRequestHeader("Authorization", authorization);
-            }
+            xhr.withCredentials = new URL(url, manifest).origin === new URL(config.adminApiBaseUrl).origin;
           },
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {

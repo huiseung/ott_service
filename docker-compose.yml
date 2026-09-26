@@ -259,6 +259,8 @@ services:
       args:
         NEXT_PUBLIC_ADMIN_API_BASE_URL: http://localhost:8080
         ADMIN_API_INTERNAL_URL: http://admin-api:8080
+    environment:
+      ADMIN_API_INTERNAL_URL: http://admin-api:8080
     depends_on:
       - admin-api
     ports:
