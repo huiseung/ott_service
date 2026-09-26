@@ -17,10 +17,12 @@ ClickHouse에 원본 payload나 playback session token을 복사하지 않는다
 
 ```powershell
 $env:GRADLE_USER_HOME = "$PWD\.gradle"
-.\backend\gradlew.bat -p backend :event-analytics:test :event-analytics:analyticsDistribution
+.\backend\gradlew.bat -p backend :event-analytics:build
 docker compose build analytics-jobmanager
 docker compose up -d analytics-taskmanager
 ```
+
+Backend 전체는 `backend/`에서 `./gradlew clean build`로 빌드한다. `build`는 배포용 JAR와 의존 라이브러리를 `build/distribution/`에 준비하는 작업도 포함한다.
 
 Kafka/MinIO/ClickHouse와 초기화 작업도 실행한다. Raw 보존을 위해 전체 스택 또는
 `docker compose up -d archive-taskmanager`를 함께 운영한다.

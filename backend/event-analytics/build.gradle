@@ -24,3 +24,7 @@ tasks.register('analyticsDistribution', Sync) {
     from(tasks.named('jar'))
     into('lib') { from configurations.analyticsLibs, configurations.runtimeClasspath }
 }
+
+tasks.named('assemble') {
+    dependsOn tasks.named('analyticsDistribution')
+}

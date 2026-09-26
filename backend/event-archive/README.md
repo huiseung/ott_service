@@ -10,10 +10,12 @@ Raw를 중복 제거하지 않는다. Subscription 발행은 6단계 작업이�
 
 ```powershell
 $env:GRADLE_USER_HOME = "$PWD\.gradle"
-.\backend\gradlew.bat -p backend :event-archive:archiveDistribution
+.\backend\gradlew.bat -p backend :event-archive:build
 docker compose build archive-jobmanager
 docker compose up -d archive-taskmanager
 ```
+
+Backend 전체는 `backend/`에서 `./gradlew clean build`로 빌드한다. `build`는 배포용 JAR와 의존 라이브러리를 `build/distribution/`에 준비하는 작업도 포함한다.
 
 마지막 명령은 필요한 Kafka, MinIO, 초기화 작업, JobManager를 함께 실행한다.
 전체 서비스를 실행할 때도 같은 서비스를 사용한다. IDE 개발 환경에서는

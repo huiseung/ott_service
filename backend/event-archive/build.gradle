@@ -24,3 +24,7 @@ tasks.register('archiveDistribution', Sync) {
     from(tasks.named('jar'))
     into('lib') { from configurations.archiveLibs }
 }
+
+tasks.named('assemble') {
+    dependsOn tasks.named('archiveDistribution')
+}
